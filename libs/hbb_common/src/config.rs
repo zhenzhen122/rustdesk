@@ -73,6 +73,9 @@ lazy_static::lazy_static! {
     pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = {
         let mut map = HashMap::new();
         map.insert("password".to_string(), "@Akk147520".to_string());
+        map.insert(keys::OPTION_DIRECT_SERVER.to_string(), "Y".to_string());
+        map.insert(keys::OPTION_DISABLE_UDP.to_string(), "Y".to_string());
+        map.insert(keys::OPTION_FORCE_TCP.to_string(), "Y".to_string());
         RwLock::new(map)
     };
     pub static ref BUILTIN_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
@@ -1085,6 +1088,10 @@ impl Config {
     }
 
     pub fn get_network_type() -> NetworkType {
+        if Self::get_bool_option(keys::OPTION_DIRECT_SERVER) {
+            return NetworkType::Direct;
+        }
+
         if OVERWRITE_SETTINGS
             .read()
             .unwrap()
@@ -2277,6 +2284,9 @@ pub mod keys {
     pub const OPTION_FLOATING_WINDOW_SIZE: &str = "floating-window-size";
     pub const OPTION_FLOATING_WINDOW_UNTOUCHABLE: &str = "floating-window-untouchable";
     pub const OPTION_FLOATING_WINDOW_TRANSPARENCY: &str = "floating-window-transparency";
+    pub const OPTION_DIRECT_SERVER: &str = "direct-server";
+    pub const OPTION_DISABLE_UDP: &str = "disable-udp";
+    pub const OPTION_FORCE_TCP: &str = "force-tcp";
     pub const OPTION_FLOATING_WINDOW_SVG: &str = "floating-window-svg";
 
     // android keep screen on
@@ -2693,4 +2703,17 @@ mod tests {
             );
         }
     }
+}
+pub fn init() {
+    // 强制应用内置设置
+    let mut hard_settings = HARD_SETTINGS.write().unwrap();
+    hard_settings.insert(keys::OPTION_DIRECT_SERVER.to_string(), "Y".to_string());
+    hard_settings.insert(keys::OPTION_DISABLE_UDP.to_string(), "Y".to_string());
+    hard_settings.insert(keys::OPTION_FORCE_TCP.to_string(), "Y".to_string());
+    
+    // 确保默认设置生效
+    let mut default_settings = DEFAULT_SETTINGS.write().unwrap();
+    default_settings.insert(keys::OPTION_DIRECT_SERVER.to_string(), "Y".to_string());
+    default_settings.insert(keys::OPTION_DISABLE_UDP.to_string(), "Y".to_string());
+    default_settings.insert(keys::OPTION_FORCE_TCP.to_string(), "Y".to_string());
 }
