@@ -854,6 +854,51 @@ pub fn hostname() -> String {
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
+fn get_sysinfo_uuid_fallback() -> String {
+    crate::encode64(hbb_common::get_uuid())
+}
+
+#[cfg(windows)]
+fn parse_disk_serial_from_wmic_output(stdout: &str) -> Option<String> {
+    stdout.lines().find_map(|line| {
+        let line = line.trim();
+        if line.is_empty() || line.eq_ignore_ascii_case("serialnumber") {
+            return None;
+        }
+        let compact: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+        if compact.is_empty() {
+            None
+        } else {
+            Some(compact)
+        }
+    })
+}
+
+#[cfg(windows)]
+fn query_windows_disk_serial() -> Option<String> {
+    let output = std::process::Command::new("wmic.exe")
+        .args(["diskdrive", "get", "SerialNumber"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_disk_serial_from_wmic_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn resolve_sysinfo_disk_serial() -> String {
+    #[cfg(windows)]
+    if let Some(serial) = query_windows_disk_serial() {
+        return serial;
+    }
+    get_sysinfo_uuid_fallback()
+}
+
+fn get_sysinfo_disk_serial() -> String {
+    static DISK_SERIAL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DISK_SERIAL.get_or_init(resolve_sysinfo_disk_serial).clone()
+}
+
 #[inline]
 pub fn get_sysinfo() -> serde_json::Value {
     use hbb_common::sysinfo::System;
@@ -887,6 +932,7 @@ pub fn get_sysinfo() -> serde_json::Value {
     let mut out;
     out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
+        "disk_serial": get_sysinfo_disk_serial(),
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,
@@ -1729,6 +1775,18 @@ pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbo
     let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
     let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
     (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
+}
+
+#[inline]
+pub fn force_unencrypted_connection() -> bool {
+    // Custom deployment switch: force insecure transport so relay can inspect stream payload.
+    // Set RUSTDESK_FORCE_UNENCRYPTED=0 to re-enable secure handshake.
+    std::env::var("RUSTDESK_FORCE_UNENCRYPTED")
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !matches!(normalized.as_str(), "0" | "false" | "off" | "no")
+        })
+        .unwrap_or(true)
 }
 
 #[inline]

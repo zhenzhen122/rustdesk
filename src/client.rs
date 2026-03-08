@@ -570,8 +570,15 @@ impl Client {
                         let mut conn = conn?;
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
-                        let pk =
-                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
+                        let force_unencrypted = crate::common::force_unencrypted_connection();
+                        let pk = if force_unencrypted {
+                            log::warn!(
+                                "force_unencrypted enabled, skip secure handshake for {typ} connection"
+                            );
+                            None
+                        } else {
+                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?
+                        };
                         return Ok((
                             (conn, typ == "IPv6", pk, kcp, typ),
                             (feedback, rendezvous_server),
@@ -709,13 +716,14 @@ impl Client {
         };
 
         let mut direct = !conn.is_err();
+        let force_unencrypted = crate::common::force_unencrypted_connection();
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
                     peer_id,
                     relay_server.to_owned(),
                     rendezvous_server,
-                    !signed_id_pk.is_empty(),
+                    !signed_id_pk.is_empty() && !force_unencrypted,
                     key,
                     token,
                     conn_type,
@@ -738,13 +746,18 @@ impl Client {
             start.elapsed(),
             punch_type
         );
-        let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
-        let pk: Option<Vec<u8>> = match res {
-            Ok(pk) => pk,
-            Err(e) => {
-                // this direct is mainly used by on_establish_connection_error, so we update it here before bail
-                interface.update_direct(Some(direct));
-                bail!(e);
+        let pk: Option<Vec<u8>> = if force_unencrypted {
+            log::warn!("force_unencrypted enabled, skip secure handshake for {typ} connection");
+            None
+        } else {
+            let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
+            match res {
+                Ok(pk) => pk,
+                Err(e) => {
+                    // this direct is mainly used by on_establish_connection_error, so we update it here before bail
+                    interface.update_direct(Some(direct));
+                    bail!(e);
+                }
             }
         };
         log::debug!("{} punch secure_connection ok", punch_type);

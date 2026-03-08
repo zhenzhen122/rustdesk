@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "generated_at_note": "Module metadata is maintained in-repo and consumed by generator workflows.",
+  "default_platform": "windows",
+  "platforms": {
+    "windows": {
+      "label": "Windows x64",
+      "workflow": ".github/workflows/generator-windows.yml",
+      "supports_modules": true
+    }
+  },
+  "modules": [
+    {
+      "module_key": "account_info_panel",
+      "name": "账号信息面板",
+      "description": "在桌面主界面展示姓名/部门，并保持接近原版 RustDesk 的显示风格。",
+      "source_docs": ["345", "348", "350"],
+      "source_doc_paths": [
+        "D:/rustdesk_web客户端/rustdesk客户端修改代码及功能/345-主界面账号信息展示与首次安装固定密码强制设置.md",
+        "D:/rustdesk_web客户端/rustdesk客户端修改代码及功能/348-主界面新增显示区UI回归原版风格.md"
+      ],
+      "platforms": ["windows"],
+      "dependencies": [],
+      "conflicts": [],
+      "implementation_status": "metadata_only",
+      "apply": {
+        "strategy": "patch_bundle",
+        "patches": [],
+        "notes": [
+          "需要从已验收客户端功能中提炼独立 patch。",
+          "当前 skeleton 仅保留模块元数据与选择协议，不直接修改源码。"
+        ]
+      },
+      "target_files": [
+        "flutter/lib/common/hbbs/hbbs.dart",
+        "flutter/lib/models/user_model.dart",
+        "flutter/lib/desktop/pages/desktop_home_page.dart"
+      ]
+    },
+    {
+      "module_key": "first_install_password",
+      "name": "首次安装固定密码流程",
+      "description": "首次安装后强制设置固定密码，并在桌面主页提供固定密码入口。",
+      "source_docs": ["345"],
+      "source_doc_paths": [
+        "D:/rustdesk_web客户端/rustdesk客户端修改代码及功能/345-主界面账号信息展示与首次安装固定密码强制设置.md"
+      ],
+      "platforms": ["windows"],
+      "dependencies": [],
+      "conflicts": [],
+      "implementation_status": "metadata_only",
+      "apply": {
+        "strategy": "patch_bundle",
+        "patches": [],
+        "notes": [
+          "需要拆分桌面端固定密码逻辑 patch。",
+          "当前 skeleton 保留模块选择与工作流协议。"
+        ]
+      },
+      "target_files": [
+        "flutter/lib/desktop/pages/desktop_home_page.dart"
+      ]
+    },
+    {
+      "module_key": "device_login_limit",
+      "name": "设备信息上报与登录上限提示",
+      "description": "上报设备信息并统一设备登录上限中文提示。",
+      "source_docs": ["344"],
+      "source_doc_paths": [
+        "D:/rustdesk_web客户端/rustdesk客户端修改代码及功能/344-客户端设备信息上报与登录上限提示.md"
+      ],
+      "platforms": ["windows"],
+      "dependencies": [],
+      "conflicts": [],
+      "implementation_status": "metadata_only",
+      "apply": {
+        "strategy": "patch_bundle",
+        "patches": [],
+        "notes": [
+          "需要从客户端已验收实现中剥离设备信息和中文提示 patch。",
+          "当前 skeleton 只描述模块与回传协议。"
+        ]
+      },
+      "target_files": [
+        "flutter/lib/common/widgets/login.dart",
+        "src/common.rs"
+      ]
+    }
+  ]
+}

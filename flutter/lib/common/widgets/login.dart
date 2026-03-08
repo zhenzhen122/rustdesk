@@ -23,6 +23,25 @@ const kOpSvgList = [
   'auth0'
 ];
 
+String _normalizeLoginErrorMessage(String cause) {
+  const deviceLimitMsg = '已达登录设备上限，请联系管理员';
+  final raw = cause.trim();
+  if (raw.isEmpty) {
+    return translate('Unknown Error');
+  }
+  final lower = raw.toLowerCase();
+  if (raw == 'DeviceLoginLimitReached' ||
+      lower.contains('device login limit reached') ||
+      raw.contains(deviceLimitMsg)) {
+    return deviceLimitMsg;
+  }
+  final translated = translate(raw);
+  if (translated != raw) {
+    return translated;
+  }
+  return raw;
+}
+
 class _IconOP extends StatelessWidget {
   final String op;
   final String? icon;
@@ -501,7 +520,7 @@ Future<bool?> loginDialog() async {
             type: HttpType.kAuthReqTypeAccount));
         await handleLoginResponse(resp, true, close);
       } on RequestException catch (err) {
-        passwordMsg = translate(err.cause);
+        passwordMsg = _normalizeLoginErrorMessage(err.cause);
       } catch (err) {
         passwordMsg = "Unknown Error: $err";
       }
@@ -657,7 +676,7 @@ Future<bool?> verificationCodeDialog(
             break;
         }
       } on RequestException catch (err) {
-        errorText = translate(err.cause);
+        errorText = _normalizeLoginErrorMessage(err.cause);
       } catch (err) {
         errorText = "Unknown Error: $err";
       }

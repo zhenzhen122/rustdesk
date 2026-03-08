@@ -419,13 +419,14 @@ impl RendezvousMediator {
         if last.0 == addr && last.1.elapsed().as_millis() < 100 {
             return Ok(());
         }
+        let force_unencrypted = crate::common::force_unencrypted_connection();
 
         self.create_relay(
             rr.socket_addr.into(),
             rr.relay_server,
             rr.uuid,
             server,
-            rr.secure,
+            rr.secure && !force_unencrypted,
             false,
             Default::default(),
             rr.control_permissions.clone().into_option(),
@@ -483,6 +484,7 @@ impl RendezvousMediator {
     }
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
+        let force_unencrypted = crate::common::force_unencrypted_connection();
         let addr = AddrMangle::decode(&fla.socket_addr);
         let last = *LAST_MSG.lock().await;
         *LAST_MSG.lock().await = (addr, Instant::now());
@@ -524,7 +526,7 @@ impl RendezvousMediator {
             relay_server,
             uuid,
             server,
-            true,
+            !force_unencrypted,
             true,
             socket_addr_v6,
             fla.control_permissions.into_option(),
@@ -539,6 +541,7 @@ impl RendezvousMediator {
         relay_server: String,
         socket_addr_v6: bytes::Bytes,
     ) -> ResultType<()> {
+        let force_unencrypted = crate::common::force_unencrypted_connection();
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
         let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
@@ -562,7 +565,7 @@ impl RendezvousMediator {
             server.clone(),
             socket,
             peer_addr,
-            true,
+            !force_unencrypted,
             fla.control_permissions.into_option(),
         )
         .await;
@@ -570,6 +573,7 @@ impl RendezvousMediator {
     }
 
     async fn handle_punch_hole(&self, ph: PunchHole, server: ServerPtr) -> ResultType<()> {
+        let force_unencrypted = crate::common::force_unencrypted_connection();
         let mut peer_addr = AddrMangle::decode(&ph.socket_addr);
         let last = *LAST_MSG.lock().await;
         *LAST_MSG.lock().await = (peer_addr, Instant::now());
@@ -604,7 +608,7 @@ impl RendezvousMediator {
                     relay_server,
                     uuid,
                     server,
-                    true,
+                    !force_unencrypted,
                     true,
                     socket_addr_v6.clone(),
                     control_permissions,
@@ -641,7 +645,13 @@ impl RendezvousMediator {
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, control_permissions)
+        crate::accept_connection(
+            server.clone(),
+            socket,
+            peer_addr,
+            !force_unencrypted,
+            control_permissions,
+        )
             .await;
         Ok(())
     }
@@ -876,6 +886,7 @@ async fn udp_nat_listen(
     server: ServerPtr,
     control_permissions: Option<ControlPermissions>,
 ) -> ResultType<()> {
+    let force_unencrypted = crate::common::force_unencrypted_connection();
     let tm = Instant::now();
     let socket_cloned = socket.clone();
     let func = async {
@@ -891,7 +902,7 @@ async fn udp_nat_listen(
             server,
             stream.1,
             peer_addr_v4,
-            true,
+            !force_unencrypted,
             control_permissions,
         )
         .await?;

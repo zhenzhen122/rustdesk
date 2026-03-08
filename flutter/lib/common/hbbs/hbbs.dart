@@ -27,6 +27,8 @@ class UserPayload {
   String name = '';
   String displayName = '';
   String avatar = '';
+  String realName = '';
+  String department = '';
   String email = '';
   String note = '';
   String? verifier;
@@ -37,6 +39,8 @@ class UserPayload {
       : name = json['name'] ?? '',
         displayName = json['display_name'] ?? '',
         avatar = json['avatar'] ?? '',
+        realName = json['real_name'] ?? '',
+        department = json['department'] ?? '',
         email = json['email'] ?? '',
         note = json['note'] ?? '',
         verifier = json['verifier'],
@@ -52,6 +56,8 @@ class UserPayload {
       'name': name,
       'display_name': displayName,
       'avatar': avatar,
+      'real_name': realName,
+      'department': department,
       'status': status == UserStatus.kDisabled
           ? 0
           : status == UserStatus.kUnverified

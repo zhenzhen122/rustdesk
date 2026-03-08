@@ -34,6 +34,8 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 const borderColor = Color(0xFF2F65BA);
+const _kOptionFirstInstallPasswordConfigured =
+    'first-install-permanent-password-configured';
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -53,6 +55,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
+  final RxBool _hasPermanentPassword = false.obs;
+  bool _forcingInitialPassword = false;
 
   final GlobalKey _childKey = GlobalKey();
 
@@ -76,6 +80,60 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
+  Future<void> _refreshPermanentPasswordStatus() async {
+    final password = await bind.mainGetPermanentPassword();
+    if (!mounted) return;
+    _hasPermanentPassword.value = password.trim().isNotEmpty;
+  }
+
+  Future<void> _markFirstInstallPasswordConfigured() async {
+    await bind.mainSetLocalOption(
+        key: _kOptionFirstInstallPasswordConfigured, value: 'Y');
+  }
+
+  Future<void> _showPermanentPasswordDialog(
+      {bool forceRequired = false}) async {
+    setPasswordDialog(
+      forceRequired: forceRequired,
+      titleText: forceRequired ? '首次安装请先设置安全密码' : null,
+      confirmText: forceRequired ? '保存并继续' : null,
+      emptyPasswordErrorText: forceRequired ? '请先设置安全密码' : null,
+      onPasswordSaved: (password) async {
+        await _refreshPermanentPasswordStatus();
+        if (password.trim().isNotEmpty) {
+          await _markFirstInstallPasswordConfigured();
+        }
+        if (!mounted) return;
+        if (forceRequired) {
+          _block.value = false;
+          _forcingInitialPassword = false;
+        }
+      },
+    );
+  }
+
+  Future<void> _ensureFirstInstallPasswordConfigured() async {
+    if (_forcingInitialPassword || isChangePermanentPasswordDisabled()) {
+      return;
+    }
+    final configured =
+        bind.mainGetLocalOption(key: _kOptionFirstInstallPasswordConfigured) ==
+            'Y';
+    await _refreshPermanentPasswordStatus();
+    if (_hasPermanentPassword.value) {
+      if (!configured) {
+        await _markFirstInstallPasswordConfigured();
+      }
+      return;
+    }
+    if (configured) {
+      return;
+    }
+    _forcingInitialPassword = true;
+    _block.value = true;
+    await _showPermanentPasswordDialog(forceRequired: true);
+  }
+
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
@@ -91,6 +149,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         child: loadLogo(),
       ),
       buildTip(context),
+      if (!isOutgoingOnly) buildAccountBindingInfoBoard(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
@@ -187,6 +246,54 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
+  Widget buildAccountBindingInfoBoard(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    return Obx(() {
+      if (!gFFI.userModel.isLogin) {
+        return const SizedBox.shrink();
+      }
+      final realName = gFFI.userModel.realName.value.trim();
+      final department = gFFI.userModel.department.value.trim();
+      final realNameText = realName.isEmpty ? '未填写' : realName;
+      final departmentText = department.isEmpty ? '未填写' : department;
+      return Container(
+        margin: const EdgeInsets.only(left: 20, right: 11, top: 6, bottom: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Container(
+              width: 2,
+              height: 38,
+              decoration: const BoxDecoration(color: MyTheme.accent),
+            ).marginOnly(top: 4),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 7),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '账号信息',
+                      style: TextStyle(
+                          fontSize: 13, color: textColor?.withOpacity(0.5)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '姓名：$realNameText  |  部门：$departmentText',
+                      style: TextStyle(
+                          fontSize: 14, color: textColor?.withOpacity(0.9)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
@@ -245,7 +352,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         ),
                       ).workaroundFreezeLinuxMint(),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -292,10 +399,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildPasswordBoard2(BuildContext context, ServerModel model) {
     RxBool refreshHover = false.obs;
-    RxBool editHover = false.obs;
+    RxBool permanentHover = false.obs;
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     final showOneTime = model.approveMode != 'click' &&
         model.verificationMethod != kUsePermanentPassword;
+    final canChangePermanentPassword =
+        !bind.isDisableSettings() && !isChangePermanentPasswordDisabled();
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
@@ -304,8 +413,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Container(
             width: 2,
-            height: 52,
-            decoration: BoxDecoration(color: MyTheme.accent),
+            height: 72,
+            decoration: const BoxDecoration(color: MyTheme.accent),
           ),
           Expanded(
             child: Padding(
@@ -359,26 +468,40 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           ),
                           onHover: (value) => refreshHover.value = value,
                         ).marginOnly(right: 8, top: 4),
-                      if (!bind.isDisableSettings())
-                        InkWell(
-                          child: Tooltip(
-                            message: translate('Change Password'),
-                            child: Obx(
-                              () => Icon(
-                                Icons.edit,
-                                color: editHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              ).marginOnly(right: 8, top: 4),
-                            ),
-                          ),
-                          onTap: () => DesktopSettingPage.switch2page(
-                              SettingsTabKey.safety),
-                          onHover: (value) => editHover.value = value,
-                        ),
                     ],
                   ),
+                  Obx(() {
+                    final hasPermanent = _hasPermanentPassword.value;
+                    final statusText = hasPermanent ? '已设置' : '未设置';
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '固定密码：$statusText',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: textColor?.withOpacity(0.5)),
+                          ),
+                        ),
+                        if (canChangePermanentPassword)
+                          InkWell(
+                            onTap: () => _showPermanentPasswordDialog(),
+                            onHover: (value) => permanentHover.value = value,
+                            child: Tooltip(
+                              message: hasPermanent ? '修改固定密码' : '设置固定密码',
+                              child: Obx(() => Icon(
+                                    Icons.edit,
+                                    color: permanentHover.value
+                                        ? textColor
+                                        : const Color(0xFFDDDDDD),
+                                    size: 20,
+                                  )),
+                            ),
+                          ).marginOnly(right: 8),
+                      ],
+                    );
+                  }),
                 ],
               ),
             ),
@@ -767,7 +890,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
     bool isChattyMethod(String methodName) {
       switch (methodName) {
-        case kWindowBumpMouse: return true;
+        case kWindowBumpMouse:
+          return true;
       }
 
       return false;
@@ -776,7 +900,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       if (!isChattyMethod(call.method)) {
         debugPrint(
-          "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+            "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
@@ -811,9 +935,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowBumpMouse) {
-        return RdPlatformChannel.instance.bumpMouse(
-          dx: call.arguments['dx'],
-          dy: call.arguments['dy']);
+        return RdPlatformChannel.instance
+            .bumpMouse(dx: call.arguments['dx'], dy: call.arguments['dy']);
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
         int? windowId;
@@ -857,6 +980,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         _updateWindowSize();
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _refreshPermanentPasswordStatus();
+      await _ensureFirstInstallPasswordConfigured();
+    });
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -907,7 +1034,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 }
 
-void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
+void setPasswordDialog(
+    {VoidCallback? notEmptyCallback,
+    bool forceRequired = false,
+    String? titleText,
+    String? confirmText,
+    String? emptyPasswordErrorText,
+    Future<void> Function(String password)? onPasswordSaved}) async {
   final pw = await bind.mainGetPermanentPassword();
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
@@ -924,12 +1057,18 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final maxLength = bind.mainMaxEncryptLen();
 
   gFFI.dialogManager.show((setState, close, context) {
-    submit() {
+    submit() async {
       setState(() {
         errMsg0 = "";
         errMsg1 = "";
       });
       final pass = p0.text.trim();
+      if (forceRequired && pass.isEmpty) {
+        setState(() {
+          errMsg0 = emptyPasswordErrorText ?? '请先设置安全密码';
+        });
+        return;
+      }
       if (pass.isNotEmpty) {
         final Iterable violations = rules.where((r) => !r.validate(pass));
         if (violations.isNotEmpty) {
@@ -947,15 +1086,18 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         });
         return;
       }
-      bind.mainSetPermanentPassword(password: pass);
+      await bind.mainSetPermanentPassword(password: pass);
       if (pass.isNotEmpty) {
         notEmptyCallback?.call();
+      }
+      if (onPasswordSaved != null) {
+        await onPasswordSaved(pass);
       }
       close();
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set Password")),
+      title: Text(titleText ?? translate("Set Password")),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
@@ -1036,12 +1178,16 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
           ],
         ),
       ),
-      actions: [
-        dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("OK", onPressed: submit),
-      ],
+      actions: forceRequired
+          ? [
+              dialogButton(confirmText ?? "保存并继续", onPressed: submit),
+            ]
+          : [
+              dialogButton("Cancel", onPressed: close, isOutline: true),
+              dialogButton("OK", onPressed: submit),
+            ],
       onSubmit: submit,
-      onCancel: close,
+      onCancel: forceRequired ? null : close,
     );
   });
 }

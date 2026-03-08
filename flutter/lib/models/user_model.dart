@@ -18,6 +18,8 @@ class UserModel {
   final RxString userName = ''.obs;
   final RxString displayName = ''.obs;
   final RxString avatar = ''.obs;
+  final RxString realName = ''.obs;
+  final RxString department = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
@@ -117,6 +119,8 @@ class UserModel {
       userName.value = (userInfo['name'] ?? '').toString();
       displayName.value = (userInfo['display_name'] ?? '').toString();
       avatar.value = (userInfo['avatar'] ?? '').toString();
+      realName.value = (userInfo['real_name'] ?? '').toString();
+      department.value = (userInfo['department'] ?? '').toString();
     }
   }
 
@@ -130,12 +134,16 @@ class UserModel {
     userName.value = '';
     displayName.value = '';
     avatar.value = '';
+    realName.value = '';
+    department.value = '';
   }
 
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
     displayName.value = user.displayName;
     avatar.value = user.avatar;
+    realName.value = user.realName;
+    department.value = user.department;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
