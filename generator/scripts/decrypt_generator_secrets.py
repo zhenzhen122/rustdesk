@@ -44,7 +44,9 @@ def main() -> int:
             payload = json.load(inner)
 
     if args.dump_json_path:
-        Path(args.dump_json_path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+        dump_path = Path(args.dump_json_path)
+        dump_path.parent.mkdir(parents=True, exist_ok=True)
+        dump_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
     exported = 0
     for key, value in payload.items():
