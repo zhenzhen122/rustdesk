@@ -7,6 +7,11 @@ import sys
 from pathlib import Path
 from urllib import error, request
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 BOUNDARY = '----RustDeskClientGeneratorBoundary7MA4YWxkTrZu0gW'
 
 
@@ -48,6 +53,7 @@ def main() -> int:
     parser.add_argument('--token', default=os.environ.get('callback_token', ''))
     parser.add_argument('--platform', default=os.environ.get('platform', 'windows'))
     parser.add_argument('--file', required=True)
+    parser.add_argument('--display-label', default='')
     parser.add_argument('--soft-fail', action='store_true')
     args = parser.parse_args()
 
@@ -67,6 +73,8 @@ def main() -> int:
         ('sha256', sha256sum(file_path)),
         ('size', str(file_path.stat().st_size)),
     ]
+    if args.display_label:
+        fields.append(('display_label', args.display_label))
     body = multipart_body(fields, [('file', file_path)])
     req = request.Request(args.url, data=body, method='POST')
     req.add_header('Content-Type', f'multipart/form-data; boundary={BOUNDARY}')

@@ -19,6 +19,7 @@ def main() -> int:
     parser.add_argument('--token', default=os.environ.get('callback_token', ''))
     parser.add_argument('--status', required=True)
     parser.add_argument('--progress', type=int, default=-1)
+    parser.add_argument('--stage', default='')
     parser.add_argument('--message', default='')
     parser.add_argument('--github-run-id', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--github-run-url', default='')
@@ -43,6 +44,8 @@ def main() -> int:
     }
     if args.progress >= 0:
         payload['progress'] = args.progress
+    if args.stage:
+        payload['stage'] = args.stage
 
     data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     req = request.Request(args.url, data=data, method='POST')

@@ -91,6 +91,7 @@ jobs:
           python controller/generator/scripts/report_job_status.py \
             --status running \
             --progress 20 \
+            --stage module_resolved \
             --message "模块清单校验完成，已准备生成 custom 配置" \
             --soft-fail
 
@@ -141,11 +142,20 @@ jobs:
             source/custom_.txt
           retention-days: 7
 
+      - name: Upload generator request callback
+        shell: bash
+        run: |
+          python controller/generator/scripts/upload_artifact_callback.py \
+            --file controller/generator/output/generator-request.json \
+            --display-label "generator-request-windows" \
+            --soft-fail
+
       - name: Report status 100%
         shell: bash
         run: |
           python controller/generator/scripts/report_job_status.py \
             --status skeleton_complete \
             --progress 100 \
+            --stage skeleton_complete \
             --message "Windows generator workflow skeleton 已完成：协议校验、模块解析、custom 配置落盘成功，真实构建步骤待接入" \
             --soft-fail
