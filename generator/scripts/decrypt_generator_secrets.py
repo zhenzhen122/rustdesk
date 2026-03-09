@@ -2,12 +2,18 @@
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 try:
     import pyzipper
 except ImportError as exc:  # pragma: no cover
     raise SystemExit(f"pyzipper is required: {exc}")
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 
 def append_env(name: str, value: str) -> None:
