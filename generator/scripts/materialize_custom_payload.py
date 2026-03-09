@@ -3,7 +3,13 @@ import argparse
 import base64
 import json
 import os
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 
 def main() -> int:
@@ -19,9 +25,11 @@ def main() -> int:
         print(f'No custom payload provided, wrote empty JSON to {output}.')
         return 0
 
-    decoded = base64.b64decode(args.payload.encode('utf-8')).decode('utf-8')
-    # normalize JSON formatting for debugability while preserving data
-    parsed = json.loads(decoded)
+    try:
+        decoded = base64.b64decode(args.payload.encode('utf-8')).decode('utf-8')
+        parsed = json.loads(decoded)
+    except Exception:
+        parsed = {}
     output.write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'Wrote custom payload to {output}.')
     return 0
