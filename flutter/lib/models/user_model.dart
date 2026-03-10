@@ -22,6 +22,11 @@ class UserModel {
   final RxString department = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
+  final RxBool wechatEnabled = false.obs;
+  final RxBool wechatReady = false.obs;
+  final RxBool wechatBound = false.obs;
+  final RxString wechatName = ''.obs;
+  final RxString wechatId = ''.obs;
   bool get isLogin => userName.isNotEmpty;
   String get displayNameOrUserName =>
       displayName.value.trim().isEmpty ? userName.value : displayName.value;
@@ -92,6 +97,11 @@ class UserModel {
 
       final user = UserPayload.fromJson(data);
       _parseAndUpdateUser(user);
+      try {
+        await fetchWechatStatus(updateState: true);
+      } catch (e) {
+        debugPrint('Failed to fetchWechatStatus after refreshCurrentUser: $e');
+      }
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
     } finally {
@@ -121,6 +131,9 @@ class UserModel {
       avatar.value = (userInfo['avatar'] ?? '').toString();
       realName.value = (userInfo['real_name'] ?? '').toString();
       department.value = (userInfo['department'] ?? '').toString();
+      wechatName.value = (userInfo['wechat_name'] ?? '').toString();
+      wechatId.value = (userInfo['wechat_id'] ?? '').toString();
+      wechatBound.value = userInfo['wechat_bound'] == true;
     }
   }
 
@@ -136,6 +149,11 @@ class UserModel {
     avatar.value = '';
     realName.value = '';
     department.value = '';
+    wechatEnabled.value = false;
+    wechatReady.value = false;
+    wechatBound.value = false;
+    wechatName.value = '';
+    wechatId.value = '';
   }
 
   _parseAndUpdateUser(UserPayload user) {
@@ -145,6 +163,9 @@ class UserModel {
     realName.value = user.realName;
     department.value = user.department;
     isAdmin.value = user.isAdmin;
+    wechatName.value = user.wechatName;
+    wechatId.value = user.wechatId;
+    wechatBound.value = user.wechatBound;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
       // ugly here, tmp solution
@@ -225,6 +246,80 @@ class UserModel {
     }
 
     return loginResponse;
+  }
+
+
+  void _applyWechatStatus(WechatStatusPayload status) {
+    wechatEnabled.value = status.enabled;
+    wechatReady.value = status.ready;
+    wechatBound.value = status.bound;
+    wechatName.value = status.wechatName;
+    wechatId.value = status.wechatId;
+  }
+
+  Future<Map<String, dynamic>> _requestJson(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+    bool auth = true,
+  }) async {
+    final url = await bind.mainGetApiServer();
+    final uri = Uri.parse('$url$path');
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (auth) {
+      headers.addAll(getHttpHeaders());
+    }
+    final http.Response resp = method == 'POST'
+        ? await http.post(uri, headers: headers, body: jsonEncode(body ?? {}))
+        : await http.get(uri, headers: headers);
+    final Map<String, dynamic> parsed = jsonDecode(decode_http_response(resp));
+    if (resp.statusCode != 200) {
+      throw RequestException(resp.statusCode, parsed['error'] ?? parsed['message'] ?? '');
+    }
+    if (parsed['error'] != null) {
+      throw RequestException(0, parsed['error']);
+    }
+    final code = parsed['code'];
+    if (code != null && code != 0) {
+      throw RequestException(0, parsed['message'] ?? parsed['error'] ?? '');
+    }
+    if (parsed['data'] is Map<String, dynamic>) {
+      return parsed['data'] as Map<String, dynamic>;
+    }
+    return parsed;
+  }
+
+  Future<WechatStatusPayload> fetchWechatStatus({bool updateState = true}) async {
+    final data = await _requestJson('/api/account/wechat/status');
+    final status = WechatStatusPayload.fromJson(data);
+    if (updateState) {
+      _applyWechatStatus(status);
+    }
+    return status;
+  }
+
+  Future<WechatSessionPayload> startWechatBindSession() async {
+    final data = await _requestJson('/api/account/wechat/bind/session/start', method: 'POST');
+    return WechatSessionPayload.fromJson(data);
+  }
+
+  Future<WechatSessionPayload> queryWechatBindSessionStatus(String sessionId) async {
+    final data = await _requestJson('/api/account/wechat/bind/session/status?session_id=${Uri.encodeQueryComponent(sessionId)}');
+    final payload = WechatSessionPayload.fromJson(data);
+    if (payload.status.toLowerCase() == 'success') {
+      await fetchWechatStatus(updateState: true);
+    }
+    return payload;
+  }
+
+  Future<WechatSessionPayload> startWechatLoginSession() async {
+    final data = await _requestJson('/api/account/wechat/login/session/start', method: 'POST', auth: false);
+    return WechatSessionPayload.fromJson(data);
+  }
+
+  Future<WechatSessionPayload> queryWechatLoginSessionStatus(String sessionId) async {
+    final data = await _requestJson('/api/account/wechat/login/session/status?session_id=${Uri.encodeQueryComponent(sessionId)}', auth: false);
+    return WechatSessionPayload.fromJson(data);
   }
 
   static Future<List<dynamic>> queryOidcLoginOptions() async {

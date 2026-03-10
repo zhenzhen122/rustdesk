@@ -52,6 +52,11 @@ pub struct LoginDeviceInfo {
     pub os: String,
     pub r#type: String,
     pub name: String,
+    pub cpu: String,
+    pub disk_serial: String,
+    pub disk_source: String,
+    pub is_virtual_machine: bool,
+    pub virtualization_hint: String,
 }
 
 lazy_static::lazy_static! {
@@ -1159,11 +1164,26 @@ pub fn get_fingerprint() -> String {
 
 #[inline]
 pub fn get_login_device_info() -> LoginDeviceInfo {
+    let sysinfo = crate::common::get_sysinfo();
     LoginDeviceInfo {
         // std::env::consts::OS is better than whoami::platform() here.
         os: std::env::consts::OS.to_owned(),
         r#type: "client".to_owned(),
         name: crate::common::hostname(),
+        cpu: sysinfo["cpu"].as_str().unwrap_or_default().to_owned(),
+        disk_serial: sysinfo["disk_serial"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+        disk_source: sysinfo["disk_source"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+        is_virtual_machine: sysinfo["is_virtual_machine"].as_bool().unwrap_or_default(),
+        virtualization_hint: sysinfo["virtualization_hint"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
     }
 }
 

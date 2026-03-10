@@ -859,44 +859,317 @@ fn get_sysinfo_uuid_fallback() -> String {
 }
 
 #[cfg(windows)]
-fn parse_disk_serial_from_wmic_output(stdout: &str) -> Option<String> {
-    stdout.lines().find_map(|line| {
-        let line = line.trim();
-        if line.is_empty() || line.eq_ignore_ascii_case("serialnumber") {
-            return None;
-        }
-        let compact: String = line.chars().filter(|c| !c.is_whitespace()).collect();
-        if compact.is_empty() {
-            None
-        } else {
-            Some(compact)
-        }
-    })
+#[derive(Clone, Debug, Default)]
+struct WindowsHardwareProbe {
+    disk_serial: String,
+    disk_source: String,
+    is_virtual_machine: bool,
+    virtualization_hint: String,
 }
 
 #[cfg(windows)]
-fn query_windows_disk_serial() -> Option<String> {
-    let output = std::process::Command::new("wmic.exe")
-        .args(["diskdrive", "get", "SerialNumber"])
+fn normalize_hardware_text(raw: &str) -> String {
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(windows)]
+fn normalize_serial_candidate(raw: &str) -> Option<String> {
+    let compact = raw
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '"' && *c != '\'')
+        .collect::<String>();
+    if compact.is_empty() {
+        return None;
+    }
+    let upper = compact.to_ascii_uppercase();
+    for invalid in [
+        "SERIALNUMBER",
+        "N/A",
+        "NONE",
+        "NULL",
+        "UNKNOWN",
+        "TOBEFILLEDBYO.E.M.",
+        "TOBEFILLEDBYOEM",
+    ] {
+        if upper == invalid {
+            return None;
+        }
+    }
+    Some(compact)
+}
+
+#[cfg(windows)]
+fn contains_vm_keyword(text: &str) -> bool {
+    let upper = text.to_ascii_uppercase();
+    [
+        "VMWARE",
+        "VIRTUALBOX",
+        "INNOTEK",
+        "QEMU",
+        "KVM",
+        "HYPER-V",
+        "HYPERV",
+        "VIRTUAL MACHINE",
+        "VIRTUAL PLATFORM",
+        "PARALLELS",
+        "XEN",
+        "VBOX",
+        "VIRTIO",
+        "BOCHS",
+    ]
+    .iter()
+    .any(|keyword| upper.contains(keyword))
+}
+
+#[cfg(windows)]
+fn parse_wmic_list_output(stdout: &str) -> HashMap<String, String> {
+    let mut values = HashMap::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            if !values.is_empty() {
+                break;
+            }
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            let key = key.trim().to_ascii_lowercase();
+            if key.is_empty() || values.contains_key(&key) {
+                continue;
+            }
+            values.insert(key, normalize_hardware_text(value));
+        }
+    }
+    values
+}
+
+#[cfg(windows)]
+fn build_virtualization_hint(manufacturer: &str, model: &str, disk_model: &str) -> String {
+    let mut values = Vec::new();
+    for item in [manufacturer, model, disk_model] {
+        let text = normalize_hardware_text(item);
+        if text.is_empty() {
+            continue;
+        }
+        if values
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&text))
+        {
+            continue;
+        }
+        values.push(text);
+    }
+    values.join(" / ")
+}
+
+#[cfg(windows)]
+fn detect_virtual_machine(
+    manufacturer: &str,
+    model: &str,
+    disk_model: &str,
+    disk_pnp_device_id: &str,
+) -> (bool, String) {
+    let manufacturer = normalize_hardware_text(manufacturer);
+    let model = normalize_hardware_text(model);
+    let disk_model = normalize_hardware_text(disk_model);
+    let disk_pnp_device_id = normalize_hardware_text(disk_pnp_device_id);
+    let mut is_virtual_machine = false;
+    if contains_vm_keyword(&manufacturer)
+        || contains_vm_keyword(&model)
+        || contains_vm_keyword(&disk_model)
+        || contains_vm_keyword(&disk_pnp_device_id)
+    {
+        is_virtual_machine = true;
+    }
+    if manufacturer.eq_ignore_ascii_case("Microsoft Corporation")
+        && model.to_ascii_uppercase().contains("VIRTUAL")
+    {
+        is_virtual_machine = true;
+    }
+    (
+        is_virtual_machine,
+        build_virtualization_hint(&manufacturer, &model, &disk_model),
+    )
+}
+
+#[cfg(windows)]
+fn query_windows_hardware_probe_powershell() -> Option<WindowsHardwareProbe> {
+    let script = r#"$ErrorActionPreference='SilentlyContinue'
+$cs = Get-CimInstance Win32_ComputerSystem
+$cimDisks = @()
+try { $cimDisks = @(Get-CimInstance Win32_DiskDrive | Select-Object SerialNumber,Model,PNPDeviceID,Index) } catch {}
+$disk = $cimDisks | Where-Object { $_.SerialNumber -and $_.SerialNumber.ToString().Trim() } | Select-Object -First 1
+$diskSource = 'powershell_cim'
+if (-not $disk) {
+  $physicalDisks = @()
+  try { $physicalDisks = @(Get-PhysicalDisk | Select-Object SerialNumber,FriendlyName,Model,DeviceId) } catch {}
+  $disk = $physicalDisks | Where-Object { $_.SerialNumber -and $_.SerialNumber.ToString().Trim() } | Select-Object -First 1
+  if ($disk) { $diskSource = 'powershell_physical_disk' }
+}
+if (-not $disk -and $cimDisks.Count -gt 0) {
+  $disk = $cimDisks | Select-Object -First 1
+}
+[pscustomobject]@{
+  manufacturer = [string]$cs.Manufacturer
+  model = [string]$cs.Model
+  disk_serial = if ($disk -and $disk.SerialNumber) { [string]$disk.SerialNumber } else { '' }
+  disk_model = if ($disk -and $disk.Model) { [string]$disk.Model } elseif ($disk -and $disk.FriendlyName) { [string]$disk.FriendlyName } else { '' }
+  disk_pnp_device_id = if ($disk -and $disk.PNPDeviceID) { [string]$disk.PNPDeviceID } else { '' }
+  disk_source = if ($disk) { $diskSource } else { '' }
+} | ConvertTo-Json -Compress"#;
+    let output = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    parse_disk_serial_from_wmic_output(&String::from_utf8_lossy(&output.stdout))
+    let payload: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let manufacturer = payload["manufacturer"].as_str().unwrap_or_default();
+    let model = payload["model"].as_str().unwrap_or_default();
+    let disk_model = payload["disk_model"].as_str().unwrap_or_default();
+    let disk_pnp_device_id = payload["disk_pnp_device_id"].as_str().unwrap_or_default();
+    let disk_serial =
+        normalize_serial_candidate(payload["disk_serial"].as_str().unwrap_or_default())
+            .unwrap_or_default();
+    let (is_virtual_machine, virtualization_hint) =
+        detect_virtual_machine(manufacturer, model, disk_model, disk_pnp_device_id);
+    Some(WindowsHardwareProbe {
+        disk_serial,
+        disk_source: if payload["disk_source"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            String::new()
+        } else {
+            payload["disk_source"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+        },
+        is_virtual_machine,
+        virtualization_hint,
+    })
 }
 
-fn resolve_sysinfo_disk_serial() -> String {
+#[cfg(windows)]
+fn query_windows_hardware_probe_wmic() -> Option<WindowsHardwareProbe> {
+    let disk_output = std::process::Command::new("wmic.exe")
+        .args([
+            "diskdrive",
+            "get",
+            "SerialNumber,Model,PNPDeviceID",
+            "/format:list",
+        ])
+        .output()
+        .ok()?;
+    let system_output = std::process::Command::new("wmic.exe")
+        .args([
+            "computersystem",
+            "get",
+            "Manufacturer,Model",
+            "/format:list",
+        ])
+        .output()
+        .ok()?;
+    if !disk_output.status.success() && !system_output.status.success() {
+        return None;
+    }
+    let disk_map = parse_wmic_list_output(&String::from_utf8_lossy(&disk_output.stdout));
+    let system_map = parse_wmic_list_output(&String::from_utf8_lossy(&system_output.stdout));
+    let manufacturer = system_map
+        .get("manufacturer")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let model = system_map
+        .get("model")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let disk_model = disk_map
+        .get("model")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let disk_pnp_device_id = disk_map
+        .get("pnpdeviceid")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let disk_serial = disk_map
+        .get("serialnumber")
+        .and_then(|value| normalize_serial_candidate(value))
+        .unwrap_or_default();
+    let (is_virtual_machine, virtualization_hint) =
+        detect_virtual_machine(manufacturer, model, disk_model, disk_pnp_device_id);
+    Some(WindowsHardwareProbe {
+        disk_serial,
+        disk_source: if disk_map.contains_key("serialnumber") {
+            "wmic".to_owned()
+        } else {
+            String::new()
+        },
+        is_virtual_machine,
+        virtualization_hint,
+    })
+}
+
+#[cfg(windows)]
+fn resolve_windows_hardware_probe() -> WindowsHardwareProbe {
+    let mut probe = query_windows_hardware_probe_powershell()
+        .or_else(query_windows_hardware_probe_wmic)
+        .unwrap_or_default();
+    if probe.disk_serial.is_empty() {
+        probe.disk_serial = get_sysinfo_uuid_fallback();
+        probe.disk_source = "uuid_fallback".to_owned();
+    }
+    probe
+}
+
+#[cfg(windows)]
+fn get_windows_hardware_probe() -> &'static WindowsHardwareProbe {
+    static PROBE: std::sync::OnceLock<WindowsHardwareProbe> = std::sync::OnceLock::new();
+    PROBE.get_or_init(resolve_windows_hardware_probe)
+}
+
+fn get_sysinfo_disk_serial() -> String {
     #[cfg(windows)]
-    if let Some(serial) = query_windows_disk_serial() {
-        return serial;
+    {
+        return get_windows_hardware_probe().disk_serial.clone();
     }
     get_sysinfo_uuid_fallback()
 }
 
-fn get_sysinfo_disk_serial() -> String {
-    static DISK_SERIAL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DISK_SERIAL.get_or_init(resolve_sysinfo_disk_serial).clone()
+fn get_sysinfo_disk_source() -> String {
+    #[cfg(windows)]
+    {
+        return get_windows_hardware_probe().disk_source.clone();
+    }
+    "uuid_fallback".to_owned()
+}
+
+fn get_sysinfo_virtualization_hint() -> String {
+    #[cfg(windows)]
+    {
+        return get_windows_hardware_probe().virtualization_hint.clone();
+    }
+    String::new()
+}
+
+fn get_sysinfo_is_virtual_machine() -> bool {
+    #[cfg(windows)]
+    {
+        return get_windows_hardware_probe().is_virtual_machine;
+    }
+    false
 }
 
 #[inline]
@@ -933,6 +1206,9 @@ pub fn get_sysinfo() -> serde_json::Value {
     out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
         "disk_serial": get_sysinfo_disk_serial(),
+        "disk_source": get_sysinfo_disk_source(),
+        "is_virtual_machine": get_sysinfo_is_virtual_machine(),
+        "virtualization_hint": get_sysinfo_virtualization_hint(),
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,

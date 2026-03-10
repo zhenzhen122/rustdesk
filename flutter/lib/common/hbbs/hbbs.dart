@@ -31,6 +31,9 @@ class UserPayload {
   String department = '';
   String email = '';
   String note = '';
+  String wechatName = '';
+  String wechatId = '';
+  bool wechatBound = false;
   String? verifier;
   UserStatus status;
   bool isAdmin = false;
@@ -43,6 +46,9 @@ class UserPayload {
         department = json['department'] ?? '',
         email = json['email'] ?? '',
         note = json['note'] ?? '',
+        wechatName = json['wechat_name'] ?? '',
+        wechatId = json['wechat_id'] ?? '',
+        wechatBound = json['wechat_bound'] == true,
         verifier = json['verifier'],
         status = json['status'] == 0
             ? UserStatus.kDisabled
@@ -58,6 +64,9 @@ class UserPayload {
       'avatar': avatar,
       'real_name': realName,
       'department': department,
+      'wechat_name': wechatName,
+      'wechat_id': wechatId,
+      'wechat_bound': wechatBound,
       'status': status == UserStatus.kDisabled
           ? 0
           : status == UserStatus.kUnverified
@@ -200,6 +209,46 @@ class LoginResponse {
     secret = json['secret'];
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
+}
+
+class WechatStatusPayload {
+  bool enabled = false;
+  bool ready = false;
+  bool bound = false;
+  String wechatName = '';
+  String wechatId = '';
+  String message = '';
+
+  WechatStatusPayload();
+
+  WechatStatusPayload.fromJson(Map<String, dynamic> json)
+      : enabled = json['enabled'] == true,
+        ready = json['ready'] == true,
+        bound = json['bound'] == true,
+        wechatName = (json['wechat_name'] ?? '').toString(),
+        wechatId = (json['wechat_id'] ?? '').toString(),
+        message = (json['message'] ?? '').toString();
+}
+
+class WechatSessionPayload {
+  String sessionId = '';
+  String qrUrl = '';
+  String status = '';
+  String statusText = '';
+  String expiresAt = '';
+  Map<String, dynamic>? authBody;
+
+  WechatSessionPayload();
+
+  WechatSessionPayload.fromJson(Map<String, dynamic> json)
+      : sessionId = (json['session_id'] ?? '').toString(),
+        qrUrl = (json['qr_url'] ?? '').toString(),
+        status = (json['status'] ?? '').toString(),
+        statusText = (json['status_text'] ?? json['message'] ?? '').toString(),
+        expiresAt = (json['expires_at'] ?? '').toString(),
+        authBody = json['auth_body'] is Map<String, dynamic>
+            ? json['auth_body'] as Map<String, dynamic>
+            : null;
 }
 
 class RequestException implements Exception {
