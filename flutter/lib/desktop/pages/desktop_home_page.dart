@@ -196,14 +196,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           children: [
             Column(
               children: [
-                SingleChildScrollView(
-                  controller: _leftPaneScrollController,
-                  child: Column(
-                    key: _childKey,
-                    children: children,
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _leftPaneScrollController,
+                    child: Column(
+                      key: _childKey,
+                      children: children,
+                    ),
                   ),
                 ),
-                Expanded(child: Container())
               ],
             ),
             if (isOutgoingOnly)
@@ -259,12 +260,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       return Container(
         margin: const EdgeInsets.only(left: 20, right: 11, top: 6, bottom: 2),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 2,
-              height: 38,
+              height: 54,
               decoration: const BoxDecoration(color: MyTheme.accent),
             ).marginOnly(top: 4),
             Expanded(
@@ -280,7 +280,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '姓名：$realNameText  |  部门：$departmentText',
+                      '姓名：$realNameText',
+                      style: TextStyle(
+                          fontSize: 14, color: textColor?.withOpacity(0.9)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '部门：$departmentText',
                       style: TextStyle(
                           fontSize: 14, color: textColor?.withOpacity(0.9)),
                     ),
@@ -300,8 +306,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       margin: const EdgeInsets.only(left: 20, right: 11),
       height: 57,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 2,
@@ -404,12 +409,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final showOneTime = model.approveMode != 'click' &&
         model.verificationMethod != kUsePermanentPassword;
     final canChangePermanentPassword =
-        !bind.isDisableSettings() && !isChangePermanentPasswordDisabled();
+        !isChangePermanentPasswordDisabled();
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 2,
