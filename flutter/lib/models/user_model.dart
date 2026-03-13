@@ -289,6 +289,55 @@ class UserModel {
     return parsed;
   }
 
+  Future<Map<String, dynamic>> _buildLoginDeviceInfo() async {
+    try {
+      final raw = bind.mainGetLoginDeviceInfo();
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (e) {
+      debugPrint('Failed to decode login device info: $e');
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> sendLoginCode({
+    required String account,
+    required String channel,
+  }) async {
+    return _requestJson(
+      '/api/login/send-code',
+      method: 'POST',
+      auth: false,
+      body: {
+        'account': account.trim(),
+        'channel': channel.trim(),
+      },
+    );
+  }
+
+  Future<LoginResponse> loginByCode({
+    required String account,
+    required String channel,
+    required String code,
+  }) async {
+    final data = await _requestJson(
+      '/api/login/code-login',
+      method: 'POST',
+      auth: false,
+      body: {
+        'account': account.trim(),
+        'channel': channel.trim(),
+        'verification_code': code.trim(),
+        'id': await bind.mainGetMyId(),
+        'uuid': await bind.mainGetUuid(),
+        'deviceInfo': await _buildLoginDeviceInfo(),
+      },
+    );
+    return getLoginResponseFromAuthBody(data);
+  }
+
   Future<WechatStatusPayload> fetchWechatStatus({bool updateState = true}) async {
     final data = await _requestJson('/api/account/wechat/status');
     final status = WechatStatusPayload.fromJson(data);

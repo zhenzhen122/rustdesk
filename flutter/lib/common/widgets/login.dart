@@ -615,7 +615,7 @@ Future<bool?> _showWechatSessionDialog({
           Text(
             isBinding
                 ? '当前账号尚未绑定微信，请使用微信扫码完成绑定后继续。'
-                : '请使用微信扫码登录。当前为功能骨架阶段，未接真实微信时仅展示状态流。',
+                : '请使用微信扫码登录，手机确认后客户端会自动完成登录。',
             style: const TextStyle(fontSize: 13),
           ).marginOnly(bottom: 12),
           Center(child: _buildWechatQrBox(state.qrUrl)).marginOnly(bottom: 12),
@@ -725,6 +725,119 @@ Future<bool> _maybeRequireWechatBindingAfterLogin() async {
   }
 }
 
+Future<bool?> loginByCodeDialog({
+  required bool isEmail,
+  required String initialAccount,
+}) async {
+  final account = TextEditingController(text: initialAccount);
+  final code = TextEditingController();
+  String? accountMsg;
+  String? codeMsg;
+  String statusText = isEmail ? '请输入账号或邮箱后发送邮箱验证码。' : '请输入账号或手机号后发送短信验证码。';
+  bool sending = false;
+  bool verifying = false;
+
+  return gFFI.dialogManager.show<bool>((setState, close, context) {
+    Future<void> sendCode() async {
+      if (account.text.trim().isEmpty) {
+        setState(() => accountMsg = isEmail ? '请输入账号或邮箱' : '请输入账号或手机号');
+        return;
+      }
+      setState(() {
+        sending = true;
+        accountMsg = null;
+        codeMsg = null;
+      });
+      try {
+        final result = await gFFI.userModel.sendLoginCode(
+          account: account.text,
+          channel: isEmail ? 'email' : 'sms',
+        );
+        setState(() {
+          statusText = (result['message'] ?? '').toString().trim();
+          final masked = (result['masked_target'] ?? '').toString().trim();
+          if (masked.isNotEmpty) {
+            statusText = '$statusText ($masked)';
+          }
+        });
+      } on RequestException catch (err) {
+        setState(() => accountMsg = _normalizeLoginErrorMessage(err.cause));
+      } catch (err) {
+        setState(() => accountMsg = 'Unknown Error: $err');
+      } finally {
+        setState(() => sending = false);
+      }
+    }
+
+    Future<void> submitLogin() async {
+      if (account.text.trim().isEmpty) {
+        setState(() => accountMsg = isEmail ? '请输入账号或邮箱' : '请输入账号或手机号');
+        return;
+      }
+      if (code.text.trim().isEmpty) {
+        setState(() => codeMsg = '请输入验证码');
+        return;
+      }
+      setState(() {
+        verifying = true;
+        accountMsg = null;
+        codeMsg = null;
+      });
+      try {
+        final resp = await gFFI.userModel.loginByCode(
+          account: account.text,
+          channel: isEmail ? 'email' : 'sms',
+          code: code.text,
+        );
+        if (resp.access_token != null) {
+          await bind.mainSetLocalOption(
+              key: 'access_token', value: resp.access_token!);
+          await bind.mainSetLocalOption(
+              key: 'user_info', value: jsonEncode(resp.user ?? {}));
+          close(true);
+          return;
+        }
+        setState(() => codeMsg = '登录失败，服务器未返回访问令牌');
+      } on RequestException catch (err) {
+        setState(() => codeMsg = _normalizeLoginErrorMessage(err.cause));
+      } catch (err) {
+        setState(() => codeMsg = 'Unknown Error: $err');
+      } finally {
+        setState(() => verifying = false);
+      }
+    }
+
+    return CustomAlertDialog(
+      title: Text(isEmail ? '邮箱验证码登录' : '手机验证码登录'),
+      contentBoxConstraints: const BoxConstraints(maxWidth: 360),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(statusText, style: const TextStyle(fontSize: 13))
+              .marginOnly(bottom: 12),
+          DialogTextField(
+            title: isEmail ? '账号 / 邮箱' : '账号 / 手机号',
+            controller: account,
+            errorText: accountMsg,
+          ),
+          DialogTextField(
+            title: '验证码',
+            controller: code,
+            errorText: codeMsg,
+          ),
+          if (sending || verifying) const LinearProgressIndicator(),
+        ],
+      ),
+      actions: [
+        dialogButton('发送验证码', onPressed: sending ? null : sendCode, isOutline: true),
+        dialogButton('登录', onPressed: verifying ? null : submitLogin),
+      ],
+      onCancel: close,
+      onSubmit: submitLogin,
+    );
+  });
+}
+
 const kAuthReqTypeOidc = 'oidc/';
 
 // call this directly
@@ -771,6 +884,26 @@ Future<bool?> loginDialog() async {
         startSession: () => gFFI.userModel.startWechatLoginSession(),
         pollSession: (sessionId) => gFFI.userModel.queryWechatLoginSessionStatus(sessionId),
         onSuccessAuthBody: _handleWechatLoginSuccess,
+      );
+      if (result == true) {
+        close(true);
+      }
+    }
+
+    Future<void> onEmailCodeLogin() async {
+      final result = await loginByCodeDialog(
+        isEmail: true,
+        initialAccount: username.text.trim(),
+      );
+      if (result == true) {
+        close(true);
+      }
+    }
+
+    Future<void> onSmsCodeLogin() async {
+      final result = await loginByCodeDialog(
+        isEmail: false,
+        initialAccount: username.text.trim(),
       );
       if (result == true) {
         close(true);
@@ -957,6 +1090,21 @@ Future<bool?> loginDialog() async {
             curOP: curOP,
             onLogin: onLogin,
             userFocusNode: userFocusNode,
+          ),
+          const SizedBox(height: 6.0),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: onEmailCodeLogin,
+                child: const Text('邮箱验证码登录'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onSmsCodeLogin,
+                child: const Text('手机验证码登录'),
+              ),
+            ],
           ),
           thirdAuthWidget(),
         ],
