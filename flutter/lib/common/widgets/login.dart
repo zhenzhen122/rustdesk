@@ -55,23 +55,30 @@ class _LoginActionButton extends StatelessWidget {
     this.onPressed,
   }) : super(key: key);
 
+  ButtonStyle _style(BuildContext context) {
+    final theme = Theme.of(context);
+    return OutlinedButton.styleFrom(
+      minimumSize: const Size.fromHeight(44),
+      alignment: Alignment.centerLeft,
+      backgroundColor: theme.cardColor,
+      foregroundColor: theme.textTheme.bodyLarge?.color,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      side: BorderSide(
+        color: theme.dividerColor.withOpacity(0.85),
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
       label: Text(label),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(40),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        side: BorderSide(
-          color: Theme.of(context).dividerColor.withOpacity(0.85),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
+      style: _style(context),
     );
   }
 }
@@ -136,15 +143,20 @@ class ButtonOP extends StatelessWidget {
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: Obx(() => ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: curOP.value.isEmpty || curOP.value == op
-                ? primaryColor
-                : Colors.grey,
+      child: Obx(() => OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            minimumSize: Size(double.infinity, height),
+            alignment: Alignment.centerLeft,
+            backgroundColor: Theme.of(context).cardColor,
+            foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            side: BorderSide(
+              color: Theme.of(context).dividerColor.withOpacity(0.85),
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
-          ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
+          ),
           onPressed: curOP.value.isEmpty || curOP.value == op ? onTap : null,
           child: Row(
             children: [
@@ -159,11 +171,8 @@ class ButtonOP extends StatelessWidget {
               Expanded(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      specialButtonLabel ?? translate("Continue with {$opLabel}"),
-                    ),
+                  child: Text(
+                    specialButtonLabel ?? translate("Continue with {$opLabel}"),
                   ),
                 ),
               ),
@@ -349,31 +358,21 @@ class LoginWidgetOP extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var children = ops
-        .map((op) => [
-              WidgetOP(
-                config: op,
-                curOP: curOP,
-                cbLogin: cbLogin,
-              ),
-              const Divider(
-                indent: 5,
-                endIndent: 5,
-              )
-            ])
-        .expand((i) => i)
-        .toList();
-    if (children.isNotEmpty) {
-      children.removeLast();
-    }
     return SingleChildScrollView(
-        child: Container(
-            width: 200,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: children,
-            )));
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: ops
+            .map((op) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: WidgetOP(
+                    config: op,
+                    curOP: curOP,
+                    cbLogin: cbLogin,
+                  ),
+                ))
+            .toList(),
+      ),
+    );
   }
 }
 
@@ -401,48 +400,39 @@ class LoginWidgetUserPass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-        padding: EdgeInsets.all(0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 8.0),
-            DialogTextField(
-                title: translate(DialogTextField.kUsernameTitle),
-                controller: username,
-                focusNode: userFocusNode,
-                prefixIcon: DialogTextField.kUsernameIcon,
-                errorText: usernameMsg),
-            PasswordWidget(
-              controller: pass,
-              autoFocus: false,
-              reRequestFocus: true,
-              errorText: passMsg,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8.0),
+          DialogTextField(
+              title: translate(DialogTextField.kUsernameTitle),
+              controller: username,
+              focusNode: userFocusNode,
+              prefixIcon: DialogTextField.kUsernameIcon,
+              errorText: usernameMsg),
+          PasswordWidget(
+            controller: pass,
+            autoFocus: false,
+            reRequestFocus: true,
+            errorText: passMsg,
+          ),
+          if (isInProgress) const LinearProgressIndicator(),
+          const SizedBox(height: 10.0),
+          Obx(
+            () => _LoginActionButton(
+              icon: Icons.login_rounded,
+              label: '密码登录',
+              onPressed: curOP.value.isEmpty || curOP.value == 'rustdesk'
+                  ? () {
+                      onLogin();
+                    }
+                  : null,
             ),
-            // NOT use Offstage to wrap LinearProgressIndicator
-            if (isInProgress) const LinearProgressIndicator(),
-            const SizedBox(height: 12.0),
-            FittedBox(
-                child:
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Container(
-                height: 38,
-                width: 200,
-                child: Obx(() => ElevatedButton(
-                      child: Text(
-                        translate('Login'),
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      onPressed:
-                          curOP.value.isEmpty || curOP.value == 'rustdesk'
-                              ? () {
-                                  onLogin();
-                                }
-                              : null,
-                    )),
-              ),
-            ])),
-          ],
-        ));
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1118,7 +1108,7 @@ Future<bool?> loginDialog() async {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
             child: Text(
               '使用 API 账号继续，支持密码、邮箱验证码、手机验证码与微信登录。',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1141,93 +1131,23 @@ Future<bool?> loginDialog() async {
             onLogin: onLogin,
             userFocusNode: userFocusNode,
           ),
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(top: 6, bottom: 4),
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: Theme.of(context).dividerColor.withOpacity(0.72),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '快捷验证码登录',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '忘记密码时可直接发送验证码登录。',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.color
-                            ?.withOpacity(0.72),
-                      ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _LoginActionButton(
-                        icon: Icons.mark_email_read_outlined,
-                        label: '邮箱验证码登录',
-                        onPressed: onEmailCodeLogin,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _LoginActionButton(
-                        icon: Icons.sms_outlined,
-                        label: '手机验证码登录',
-                        onPressed: onSmsCodeLogin,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          const SizedBox(height: 10),
+          _LoginActionButton(
+            icon: Icons.mark_email_read_outlined,
+            label: '邮箱验证码登录',
+            onPressed: onEmailCodeLogin,
+          ),
+          const SizedBox(height: 8),
+          _LoginActionButton(
+            icon: Icons.sms_outlined,
+            label: '手机验证码登录',
+            onPressed: onSmsCodeLogin,
           ),
           Obx(() => Offstage(
                 offstage: loginOptions.isEmpty,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 6),
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color:
-                              Theme.of(context).dividerColor.withOpacity(0.72),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '微信与第三方登录',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 10),
-                          thirdAuthWidget(),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: thirdAuthWidget(),
                 ),
               )),
         ],
