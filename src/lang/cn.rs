@@ -80,6 +80,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection in progress. Please wait.", "正在进行连接，请稍候。"),
         ("Please try 1 minute later", "一分钟后再试"),
         ("Login Error", "登录错误"),
+        ("Please login to your API account first", "请先登录 API 账号"),
         ("Successful", "成功"),
         ("Connected, waiting for image...", "已连接，等待画面传输..."),
         ("Name", "名称"),

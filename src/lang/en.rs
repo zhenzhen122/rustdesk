@@ -19,6 +19,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong Password", "Wrong password"),
         ("Connection Error", "Connection error"),
         ("Login Error", "Login error"),
+        ("Please login to your API account first", "Please login to your API account first"),
         ("Show Hidden Files", "Show hidden files"),
         ("Refresh File", "Refresh file"),
         ("Remote Computer", "Remote computer"),

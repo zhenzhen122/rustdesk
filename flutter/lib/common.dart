@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -2296,46 +2295,41 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
     }
   }
   if (type != null && id != null) {
-    switch (type) {
-      case UriLinkType.remoteDesktop:
-        Future.delayed(Duration.zero, () {
+    Future.delayed(Duration.zero, () async {
+      if (!await ensureApiUserLoggedInForRemoteAccess()) {
+        return;
+      }
+      switch (type) {
+        case UriLinkType.remoteDesktop:
           rustDeskWinManager.newRemoteDesktop(id!,
               password: password,
               switchUuid: switchUuid,
               forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.fileTransfer:
-        Future.delayed(Duration.zero, () {
+          break;
+        case UriLinkType.fileTransfer:
           rustDeskWinManager.newFileTransfer(id!,
               password: password, forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.viewCamera:
-        Future.delayed(Duration.zero, () {
+          break;
+        case UriLinkType.viewCamera:
           rustDeskWinManager.newViewCamera(id!,
               password: password, forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.portForward:
-        Future.delayed(Duration.zero, () {
+          break;
+        case UriLinkType.portForward:
           rustDeskWinManager.newPortForward(id!, false,
               password: password, forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.rdp:
-        Future.delayed(Duration.zero, () {
+          break;
+        case UriLinkType.rdp:
           rustDeskWinManager.newPortForward(id!, true,
               password: password, forceRelay: forceRelay);
-        });
-        break;
-      case UriLinkType.terminal:
-        Future.delayed(Duration.zero, () {
+          break;
+        case UriLinkType.terminal:
           rustDeskWinManager.newTerminal(id!,
               password: password, forceRelay: forceRelay);
-        });
-        break;
-    }
+          break;
+        case null:
+          break;
+      }
+    });
 
     return true;
   }
@@ -2509,6 +2503,7 @@ connect(BuildContext context, String id,
     String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
+  if (!await ensureApiUserLoggedInForRemoteAccess()) return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {
@@ -2660,6 +2655,25 @@ connect(BuildContext context, String id,
   if (!currentFocus.hasPrimaryFocus) {
     currentFocus.unfocus();
   }
+}
+
+bool _shouldRequireApiUserLoginForRemoteAccess() {
+  final apiServer = bind.mainGetOptionSync(key: 'api-server').trim();
+  return apiServer.isNotEmpty;
+}
+
+Future<bool> ensureApiUserLoggedInForRemoteAccess() async {
+  if (!_shouldRequireApiUserLoginForRemoteAccess()) {
+    return true;
+  }
+  final accessToken = bind.mainGetLocalOption(key: 'access_token').trim();
+  if (accessToken.isNotEmpty) {
+    return true;
+  }
+  debugPrint(
+      '[auth-gate] blocked remote access because access_token is empty');
+  showToast(translate('Please login to your API account first'));
+  return false;
 }
 
 Map<String, String> getHttpHeaders() {

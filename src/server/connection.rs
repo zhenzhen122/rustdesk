@@ -27,7 +27,7 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{self, keys, Config, TrustedDevice},
+    config::{self, keys, Config, LocalConfig, TrustedDevice},
     fs::{self, can_enable_overwrite_detection, JobType},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
@@ -2166,6 +2166,23 @@ impl Connection {
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
+            }
+            let api_server = Config::get_option("api-server");
+            let must_login = Config::get_option("must-login");
+            let enforce_api_login = if !must_login.trim().is_empty() {
+                config::option2bool("must-login", &must_login)
+            } else {
+                !api_server.trim().is_empty()
+            };
+            if enforce_api_login && LocalConfig::get_option("access_token").trim().is_empty() {
+                log::warn!(
+                    "reject incoming remote access from {} because local api account is not logged in",
+                    lr.my_id
+                );
+                self.send_login_error(crate::client::LOGIN_MSG_API_ACCOUNT_LOGIN_REQUIRED)
+                    .await;
+                sleep(1.).await;
+                return false;
             }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {

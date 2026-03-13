@@ -540,6 +540,26 @@ impl<T: InvokeUiSession> Remote<T> {
                 return false;
             }
             Data::Login((os_username, os_password, password, remember)) => {
+                let api_server = config::Config::get_option("api-server");
+                let must_login = config::Config::get_option("must-login");
+                let enforce_api_login = if !must_login.trim().is_empty() {
+                    config::option2bool("must-login", &must_login)
+                } else {
+                    !api_server.trim().is_empty()
+                };
+                if enforce_api_login && LocalConfig::get_option("access_token").trim().is_empty() {
+                    log::warn!(
+                        "block outgoing remote access to {} because api account is not logged in",
+                        self.handler.get_id()
+                    );
+                    self.handler.msgbox(
+                        "error",
+                        "Login Error",
+                        client::LOGIN_MSG_API_ACCOUNT_LOGIN_REQUIRED,
+                        "",
+                    );
+                    return true;
+                }
                 self.handler
                     .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
