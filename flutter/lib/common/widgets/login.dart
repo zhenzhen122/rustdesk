@@ -869,6 +869,7 @@ Future<bool?> loginByCodeDialog({
         ],
       ),
       actions: [
+        dialogButton('取消', onPressed: close, isOutline: true),
         dialogButton('发送验证码', onPressed: sending ? null : sendCode, isOutline: true),
         dialogButton('登录', onPressed: verifying ? null : submitLogin),
       ],
