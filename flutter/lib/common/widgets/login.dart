@@ -43,87 +43,6 @@ String _normalizeLoginErrorMessage(String cause) {
   return raw;
 }
 
-class _LoginSectionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final Widget child;
-
-  const _LoginSectionCard({
-    Key? key,
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    required this.child,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final borderColor = (theme.dividerColor).withOpacity(isDark ? 0.32 : 0.8);
-    final iconBg = isDark
-        ? MyTheme.accent.withOpacity(0.16)
-        : MyTheme.accent.withOpacity(0.10);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 18, color: MyTheme.accent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (subtitle != null && subtitle!.trim().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          subtitle!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.textTheme.bodySmall?.color
-                                ?.withOpacity(0.72),
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
 class _LoginActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -214,38 +133,43 @@ class ButtonOP extends StatelessWidget {
           'gitlab': 'GitLab'
         }[lowerOp] ??
         toCapitalized(op);
-    return Row(children: [
-      Container(
-        height: height,
-        width: 200,
-        child: Obx(() => ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: curOP.value.isEmpty || curOP.value == op
-                  ? primaryColor
-                  : Colors.grey,
-            ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
-            onPressed: curOP.value.isEmpty || curOP.value == op ? onTap : null,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 30,
-                  child: _IconOP(
-                    op: op,
-                    icon: icon,
-                    margin: EdgeInsets.only(right: 5),
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Obx(() => ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: curOP.value.isEmpty || curOP.value == op
+                ? primaryColor
+                : Colors.grey,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
+          onPressed: curOP.value.isEmpty || curOP.value == op ? onTap : null,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: _IconOP(
+                  op: op,
+                  icon: icon,
+                  margin: EdgeInsets.only(right: 5),
+                ),
+              ),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      specialButtonLabel ?? translate("Continue with {$opLabel}"),
+                    ),
                   ),
                 ),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Center(
-                        child: Text(specialButtonLabel ?? translate("Continue with {$opLabel}"))),
-                  ),
-                ),
-              ],
-            ))),
-      ),
-    ]);
+              ),
+            ],
+          ))),
+    );
   }
 }
 
@@ -927,9 +851,8 @@ Future<bool?> loginByCodeDialog({
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 10),
             child: Text(
               statusText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -942,31 +865,17 @@ Future<bool?> loginByCodeDialog({
                   ),
             ),
           ),
-          _LoginSectionCard(
-            icon: isEmail
-                ? Icons.mark_email_read_outlined
-                : Icons.sms_outlined,
-            title: isEmail ? '邮箱验证码' : '短信验证码',
-            subtitle: isEmail
-                ? '填写账号或邮箱，发送验证码后直接登录。'
-                : '填写账号或手机号，发送验证码后直接登录。',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DialogTextField(
-                  title: isEmail ? '账号 / 邮箱' : '账号 / 手机号',
-                  controller: account,
-                  errorText: accountMsg,
-                ),
-                DialogTextField(
-                  title: '验证码',
-                  controller: code,
-                  errorText: codeMsg,
-                ),
-                if (sending || verifying) const LinearProgressIndicator(),
-              ],
-            ),
+          DialogTextField(
+            title: isEmail ? '账号 / 邮箱' : '账号 / 手机号',
+            controller: account,
+            errorText: accountMsg,
           ),
+          DialogTextField(
+            title: '验证码',
+            controller: code,
+            errorText: codeMsg,
+          ),
+          if (sending || verifying) const LinearProgressIndicator(),
         ],
       ),
       actions: [
@@ -1204,27 +1113,58 @@ Future<bool?> loginDialog() async {
     return CustomAlertDialog(
       title: title,
       titlePadding: titlePadding,
-      contentBoxConstraints: BoxConstraints(minWidth: 430, maxWidth: 460),
+      contentBoxConstraints: BoxConstraints(minWidth: 400, maxWidth: 430),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            child: Text(
+              '使用 API 账号继续，支持密码、邮箱验证码、手机验证码与微信登录。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    height: 1.4,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.74),
+                  ),
+            ),
+          ),
+          LoginWidgetUserPass(
+            username: username,
+            pass: password,
+            usernameMsg: usernameMsg,
+            passMsg: passwordMsg,
+            isInProgress: isInProgress,
+            curOP: curOP,
+            onLogin: onLogin,
+            userFocusNode: userFocusNode,
+          ),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            margin: const EdgeInsets.only(top: 6, bottom: 4),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Theme.of(context).dividerColor.withOpacity(0.72),
+              ),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '使用 API 账号登录',
+                  '快捷验证码登录',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
-                  '保持简洁的原生登录体验，支持密码、邮箱验证码、手机验证码与微信登录。',
+                  '忘记密码时可直接发送验证码登录。',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        height: 1.4,
                         color: Theme.of(context)
                             .textTheme
                             .bodySmall
@@ -1232,60 +1172,60 @@ Future<bool?> loginDialog() async {
                             ?.withOpacity(0.72),
                       ),
                 ),
-              ],
-            ),
-          ),
-          _LoginSectionCard(
-            icon: Icons.lock_outline_rounded,
-            title: '账号密码',
-            subtitle: '适合日常登录，布局保持贴近原版 RustDesk 的简洁输入风格。',
-            child: LoginWidgetUserPass(
-              username: username,
-              pass: password,
-              usernameMsg: usernameMsg,
-              passMsg: passwordMsg,
-              isInProgress: isInProgress,
-              curOP: curOP,
-              onLogin: onLogin,
-              userFocusNode: userFocusNode,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _LoginSectionCard(
-            icon: Icons.verified_user_outlined,
-            title: '快捷验证码登录',
-            subtitle: '忘记密码时可直接发送验证码登录，邮件与短信入口分开展示，更容易理解。',
-            child: Row(
-              children: [
-                Expanded(
-                  child: _LoginActionButton(
-                    icon: Icons.mark_email_read_outlined,
-                    label: '邮箱验证码登录',
-                    onPressed: onEmailCodeLogin,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _LoginActionButton(
-                    icon: Icons.sms_outlined,
-                    label: '手机验证码登录',
-                    onPressed: onSmsCodeLogin,
-                  ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _LoginActionButton(
+                        icon: Icons.mark_email_read_outlined,
+                        label: '邮箱验证码登录',
+                        onPressed: onEmailCodeLogin,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _LoginActionButton(
+                        icon: Icons.sms_outlined,
+                        label: '手机验证码登录',
+                        onPressed: onSmsCodeLogin,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
           Obx(() => Offstage(
                 offstage: loginOptions.isEmpty,
                 child: Column(
                   children: [
-                    const SizedBox(height: 10),
-                    _LoginSectionCard(
-                      icon: Icons.account_circle_outlined,
-                      title: '微信与第三方登录',
-                      subtitle: '仅在服务端已启用并配置完成时显示，避免默认状态下界面拥挤。',
-                      child: thirdAuthWidget(),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color:
+                              Theme.of(context).dividerColor.withOpacity(0.72),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '微信与第三方登录',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 10),
+                          thirdAuthWidget(),
+                        ],
+                      ),
                     ),
                   ],
                 ),
