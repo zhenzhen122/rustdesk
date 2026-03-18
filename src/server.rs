@@ -15,7 +15,7 @@ use hbb_common::{
     allow_err,
     anyhow::Context,
     bail,
-    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, LocalConfig, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Enum, Message as _},
@@ -327,8 +327,10 @@ async fn create_relay_connection_(
     .await?;
     let mut msg_out = RendezvousMessage::new();
     let licence_key = crate::get_key(true).await;
+    let access_token = LocalConfig::get_option("access_token");
     msg_out.set_request_relay(RequestRelay {
         licence_key,
+        token: access_token,
         uuid,
         ..Default::default()
     });
