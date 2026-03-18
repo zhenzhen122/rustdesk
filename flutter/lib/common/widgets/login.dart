@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../utils/http_service.dart' as http;
 
 import '../../common.dart';
 import './dialog.dart';
@@ -135,11 +136,8 @@ class ButtonOP extends StatelessWidget {
   Widget build(BuildContext context) {
     final lowerOp = op.toLowerCase();
     final specialButtonLabel = {'wechat_open': '微信登录'}[lowerOp];
-    final opLabel = {
-          'github': 'GitHub',
-          'gitlab': 'GitLab'
-        }[lowerOp] ??
-        toCapitalized(op);
+    final opLabel =
+        {'github': 'GitHub', 'gitlab': 'GitLab'}[lowerOp] ?? toCapitalized(op);
     return SizedBox(
       height: height,
       width: double.infinity,
@@ -436,7 +434,6 @@ class LoginWidgetUserPass extends StatelessWidget {
   }
 }
 
-
 String _normalizeWechatFlowMessage(String cause, {required String fallback}) {
   final raw = cause.trim();
   if (raw.isEmpty) {
@@ -457,14 +454,48 @@ class _WechatDialogState {
   String expiresAt = '';
   Map<String, dynamic>? authBody;
 
-  void apply(WechatSessionPayload payload) {
+  void apply(WechatSessionPayload payload, {bool replaceQrUrl = true}) {
     sessionId = payload.sessionId;
-    qrUrl = payload.qrUrl;
+    if (replaceQrUrl && payload.qrUrl.trim().isNotEmpty) {
+      qrUrl = payload.qrUrl;
+    }
     status = payload.status;
     statusText = payload.statusText;
     expiresAt = payload.expiresAt;
     authBody = payload.authBody;
   }
+}
+
+bool _isWechatOfficialQrImageUrl(String url) {
+  final raw = url.trim().toLowerCase();
+  return raw.contains('open.weixin.qq.com/connect/qrcode/');
+}
+
+Future<String> _resolveWechatQrDisplayUrl(String qrUrl) async {
+  final raw = qrUrl.trim();
+  if (raw.isEmpty) {
+    return '';
+  }
+  if (!raw.contains('open.weixin.qq.com/connect/qrconnect')) {
+    return raw;
+  }
+  try {
+    final resp = await http.get(Uri.parse(raw), headers: {
+      'Accept':
+          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    });
+    if (resp.statusCode != 200) {
+      return raw;
+    }
+    final html = resp.body;
+    final match = RegExp(r'/connect/qrcode/([A-Za-z0-9_-]+)').firstMatch(html);
+    if (match != null) {
+      return 'https://open.weixin.qq.com/connect/qrcode/${match.group(1)}';
+    }
+  } catch (e) {
+    debugPrint('Failed to resolve wechat qr display url: $e');
+  }
+  return raw;
 }
 
 Widget _buildWechatQrBox(String qrUrl) {
@@ -496,13 +527,26 @@ Widget _buildWechatQrBox(String qrUrl) {
       border: Border.all(color: Colors.grey.withOpacity(0.25)),
     ),
     padding: const EdgeInsets.all(8),
-    child: QrImageView(
-      backgroundColor: Colors.white,
-      data: qrUrl,
-      version: QrVersions.auto,
-      size: 160,
-      gapless: false,
-    ),
+    child: _isWechatOfficialQrImageUrl(qrUrl)
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Image.network(
+              qrUrl,
+              width: 160,
+              height: 160,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Text('微信二维码加载失败'),
+              ),
+            ),
+          )
+        : QrImageView(
+            backgroundColor: Colors.white,
+            data: qrUrl,
+            version: QrVersions.auto,
+            size: 160,
+            gapless: false,
+          ),
   );
 }
 
@@ -523,7 +567,8 @@ Future<bool?> _showWechatSessionDialog({
     pollTimer = null;
   }
 
-  Future<void> startPolling(void Function(void Function()) setState, void Function([dynamic]) close) async {
+  Future<void> startPolling(void Function(void Function()) setState,
+      void Function([dynamic]) close) async {
     await stopPolling();
     if (state.sessionId.trim().isEmpty) {
       return;
@@ -531,7 +576,7 @@ Future<bool?> _showWechatSessionDialog({
     pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       try {
         final payload = await pollSession(state.sessionId);
-        state.apply(payload);
+        state.apply(payload, replaceQrUrl: false);
         if (payload.authBody != null && onSuccessAuthBody != null) {
           final ok = await onSuccessAuthBody(payload.authBody!);
           if (ok) {
@@ -540,7 +585,8 @@ Future<bool?> _showWechatSessionDialog({
             return;
           }
         }
-        if (payload.status.toLowerCase() == 'success' && onSuccessAuthBody == null) {
+        if (payload.status.toLowerCase() == 'success' &&
+            onSuccessAuthBody == null) {
           await stopPolling();
           close(true);
           return;
@@ -576,15 +622,18 @@ Future<bool?> _showWechatSessionDialog({
     });
   }
 
-  Future<void> beginSession(void Function(void Function()) setState, void Function([dynamic]) close) async {
+  Future<void> beginSession(void Function(void Function()) setState,
+      void Function([dynamic]) close) async {
     await stopPolling();
     setState(() {
       loading = true;
       errorText = null;
+      state.qrUrl = '';
       state.statusText = isBinding ? '正在获取微信绑定二维码...' : '正在获取微信登录二维码...';
     });
     try {
       final payload = await startSession();
+      payload.qrUrl = await _resolveWechatQrDisplayUrl(payload.qrUrl);
       state.apply(payload);
       if (payload.authBody != null && onSuccessAuthBody != null) {
         final ok = await onSuccessAuthBody(payload.authBody!);
@@ -594,7 +643,8 @@ Future<bool?> _showWechatSessionDialog({
           return;
         }
       }
-      if (payload.status.toLowerCase() == 'success' && onSuccessAuthBody == null) {
+      if (payload.status.toLowerCase() == 'success' &&
+          onSuccessAuthBody == null) {
         setState(() => loading = false);
         close(true);
         return;
@@ -615,7 +665,8 @@ Future<bool?> _showWechatSessionDialog({
     }
   }
 
-  final result = await gFFI.dialogManager.show<bool>((setState, close, context) {
+  final result =
+      await gFFI.dialogManager.show<bool>((setState, close, context) {
     Future<void> onClose() async {
       await stopPolling();
       if (onCancel != null) {
@@ -651,26 +702,35 @@ Future<bool?> _showWechatSessionDialog({
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: errorText == null ? const Color(0xFFF4F8FF) : const Color(0xFFFFF1F1),
+              color: errorText == null
+                  ? const Color(0xFFF4F8FF)
+                  : const Color(0xFFFFF1F1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: errorText == null ? const Color(0xFFD5E4FF) : const Color(0xFFF3B7B7),
+                color: errorText == null
+                    ? const Color(0xFFD5E4FF)
+                    : const Color(0xFFF3B7B7),
               ),
             ),
             child: Text(
-              errorText ?? _normalizeWechatFlowMessage(
-                state.statusText,
-                fallback: isBinding ? '等待微信扫码绑定...' : '等待微信扫码登录...',
-              ),
+              errorText ??
+                  _normalizeWechatFlowMessage(
+                    state.statusText,
+                    fallback: isBinding ? '等待微信扫码绑定...' : '等待微信扫码登录...',
+                  ),
               style: TextStyle(
                 fontSize: 13,
-                color: errorText == null ? const Color(0xFF3B5B8C) : const Color(0xFFB83737),
-                fontWeight: errorText == null ? FontWeight.w500 : FontWeight.w700,
+                color: errorText == null
+                    ? const Color(0xFF3B5B8C)
+                    : const Color(0xFFB83737),
+                fontWeight:
+                    errorText == null ? FontWeight.w500 : FontWeight.w700,
               ),
             ),
           ).marginOnly(bottom: 12),
           if (state.expiresAt.trim().isNotEmpty)
-            Text('二维码有效期：${state.expiresAt}', style: const TextStyle(fontSize: 12, color: Colors.grey))
+            Text('二维码有效期：${state.expiresAt}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey))
                 .marginOnly(bottom: 4),
           if (loading) const LinearProgressIndicator(),
         ],
@@ -721,35 +781,53 @@ class WechatWidgetOP extends StatelessWidget {
   }
 }
 
-
 Future<bool> _handleWechatLoginSuccess(Map<String, dynamic> authBody) async {
   final resp = gFFI.userModel.getLoginResponseFromAuthBody(authBody);
   if (resp.access_token == null) {
     return false;
   }
   await bind.mainSetLocalOption(key: 'access_token', value: resp.access_token!);
-  await bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(resp.user ?? {}));
+  await bind.mainSetLocalOption(
+      key: 'user_info', value: jsonEncode(resp.user ?? {}));
   return true;
 }
 
 Future<bool> _maybeRequireWechatBindingAfterLogin() async {
+  if (gFFI.userModel.isAdmin.value) {
+    return true;
+  }
   try {
     final status = await gFFI.userModel.fetchWechatStatus(updateState: true);
-    if (!status.enabled || !status.ready || status.bound) {
+    if (!status.enabled || !status.ready) {
+      final message = _normalizeWechatFlowMessage(
+        status.message,
+        fallback: '管理员尚未完成微信登录配置',
+      );
+      await gFFI.userModel.logOut();
+      showToast(message);
+      return false;
+    }
+    if (status.bound) {
       return true;
     }
     final result = await _showWechatSessionDialog(
       isBinding: true,
       startSession: () => gFFI.userModel.startWechatBindSession(),
-      pollSession: (sessionId) => gFFI.userModel.queryWechatBindSessionStatus(sessionId),
+      pollSession: (sessionId) =>
+          gFFI.userModel.queryWechatBindSessionStatus(sessionId),
       onCancel: () async {
         await gFFI.userModel.logOut();
       },
     );
     return result == true;
   } catch (e) {
-    debugPrint('_maybeRequireWechatBindingAfterLogin skipped: $e');
-    return true;
+    debugPrint('_maybeRequireWechatBindingAfterLogin failed: $e');
+    await gFFI.userModel.logOut();
+    showToast(_normalizeWechatFlowMessage(
+      e.toString(),
+      fallback: '微信绑定状态查询失败，请稍后重试',
+    ));
+    return false;
   }
 }
 
@@ -870,7 +948,8 @@ Future<bool?> loginByCodeDialog({
       ),
       actions: [
         dialogButton('取消', onPressed: close, isOutline: true),
-        dialogButton('发送验证码', onPressed: sending ? null : sendCode, isOutline: true),
+        dialogButton('发送验证码',
+            onPressed: sending ? null : sendCode, isOutline: true),
         dialogButton('登录', onPressed: verifying ? null : submitLogin),
       ],
       onCancel: close,
@@ -923,7 +1002,8 @@ Future<bool?> loginDialog() async {
       final result = await _showWechatSessionDialog(
         isBinding: false,
         startSession: () => gFFI.userModel.startWechatLoginSession(),
-        pollSession: (sessionId) => gFFI.userModel.queryWechatLoginSessionStatus(sessionId),
+        pollSession: (sessionId) =>
+            gFFI.userModel.queryWechatLoginSessionStatus(sessionId),
         onSuccessAuthBody: _handleWechatLoginSuccess,
       );
       if (result == true) {
@@ -1049,7 +1129,8 @@ Future<bool?> loginDialog() async {
                 cbLogin: (Map<String, dynamic> authBody) async {
                   LoginResponse? resp;
                   try {
-                    resp = gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+                    resp =
+                        gFFI.userModel.getLoginResponseFromAuthBody(authBody);
                   } catch (e) {
                     debugPrint('Failed to parse oidc login body: "$authBody"');
                   }
