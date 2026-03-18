@@ -81,6 +81,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please try 1 minute later", "請於 1 分鐘後再試"),
         ("Login Error", "登入錯誤"),
         ("Please login to your API account first", "請先登入 API 帳號"),
+        ("Both control and controlled sides must login to API account", "控制端和被控端都必須先登入 API 帳號"),
         ("Successful", "成功"),
         ("Connected, waiting for image...", "已連線，等待畫面傳輸..."),
         ("Name", "名稱"),
