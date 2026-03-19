@@ -327,7 +327,7 @@ async fn create_relay_connection_(
     .await?;
     let mut msg_out = RendezvousMessage::new();
     let licence_key = crate::get_key(true).await;
-    let access_token = LocalConfig::get_option("access_token");
+    let access_token = crate::common::get_api_access_token();
     msg_out.set_request_relay(RequestRelay {
         licence_key,
         token: access_token,

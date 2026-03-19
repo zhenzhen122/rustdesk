@@ -547,7 +547,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     !api_server.trim().is_empty()
                 };
-                if enforce_api_login && LocalConfig::get_option("access_token").trim().is_empty() {
+                if enforce_api_login && crate::common::get_api_access_token().trim().is_empty() {
                     log::warn!(
                         "block outgoing remote access to {} because api account is not logged in",
                         self.handler.get_id()

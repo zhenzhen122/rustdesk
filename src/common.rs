@@ -2655,6 +2655,18 @@ pub fn get_control_permission(
     }
 }
 
+pub fn get_api_access_token() -> String {
+    let token = LocalConfig::get_option("access_token");
+    if !token.trim().is_empty() {
+        return token;
+    }
+    let token_from_file = LocalConfig::get_option_from_file("access_token");
+    if !token_from_file.trim().is_empty() {
+        return token_from_file;
+    }
+    Config::get_option("access_token")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

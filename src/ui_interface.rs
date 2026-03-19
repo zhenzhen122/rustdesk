@@ -250,7 +250,17 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn set_local_option(key: String, value: String) {
-    LocalConfig::set_option(key.clone(), value);
+    LocalConfig::set_option(key.clone(), value.clone());
+    if key == "access_token" {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            crate::ipc::set_option(&key, &value);
+        }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            Config::set_option(key, value);
+        }
+    }
 }
 
 /// Resolve relative avatar path (e.g. "/avatar/xxx") to absolute URL

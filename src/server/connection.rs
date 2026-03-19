@@ -2174,7 +2174,7 @@ impl Connection {
             } else {
                 !api_server.trim().is_empty()
             };
-            if enforce_api_login && LocalConfig::get_option("access_token").trim().is_empty() {
+            if enforce_api_login && crate::common::get_api_access_token().trim().is_empty() {
                 log::warn!(
                     "reject incoming remote access from {} because local api account is not logged in",
                     lr.my_id
