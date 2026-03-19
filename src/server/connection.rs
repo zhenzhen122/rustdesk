@@ -2172,7 +2172,7 @@ impl Connection {
             let enforce_api_login = if !must_login.trim().is_empty() {
                 config::option2bool("must-login", &must_login)
             } else {
-                !api_server.trim().is_empty()
+                false
             };
             if enforce_api_login && crate::common::get_api_access_token().trim().is_empty() {
                 log::warn!(
